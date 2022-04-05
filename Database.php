@@ -5,6 +5,8 @@
  * @version 1.0
  * @license MIT
  */
+require('ResultObject.php');
+
 class Database{
 	// Database connection properties
 	private $server = 'localhost';
@@ -13,6 +15,7 @@ class Database{
 	private $database = 'test';
 	private $table = null;
 	private $conn;
+	private $charset = "utf8mb4";
 
 	// MySQL properties
 	private $stmt = null;
@@ -35,11 +38,12 @@ class Database{
 	private $perPage;
 	private $page;
 
+	public $sql_error;
+
 	/**
 	 * constructor method creates database connection
 	 **/
-	public function __construct($reporting=false){
-		$this->errorReporting($reporting);
+	public function __construct(){
 		$this->conn();
 	}
 
@@ -49,14 +53,38 @@ class Database{
 	 * if true then error reporting is on
 	 * else error reporting remains off
 	 **/
-	private function errorReporting($reporting=false){
+	public function errorReporting($reporting=false){
+		$driver = new mysqli_driver();
 		if ($reporting===true) {
-			$driver = new mysqli_driver();
 			$driver->report_mode = MYSQLI_REPORT_ALL;
+			return $this;
+		}elseif ($reporting===false){
+			$driver->report_mode = MYSQLI_REPORT_OFF;
+			return $this;
+		}else{
+			$driver->report_mode = MYSQLI_REPORT_STRICT;
 			return $this;
 		}
 	}
 
+	protected function dbExists(){
+		$this->conn(false);
+		$result = $this->conn->query("SHOW DATABASES LIKE '{$this->database}'");
+		if ($result->num_rows > 0) {
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+	protected function tableExists($table){
+		$result = $this->conn->query("SHOW TABLES LIKE '{$table}'");
+		if ($result->num_rows > 0) {
+			return true;
+		}else{
+			return false;
+		}
+	}
 
 	/**
 	 * database connection method
@@ -65,17 +93,23 @@ class Database{
 	 * if $db=false it will return connection without database
 	 **/
 	private function conn($db=true){
-		if ($db===true) {
+		if ($db===true && $this->dbExists()) {
 			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database);
 		}elseif($db===false){
 			$conn = new \mysqli($this->server, $this->user, $this->password);
 		}
-		// check connection is done or not
-		if ($conn->connect_error) {
-		  die("Connection failed: " . $conn->connect_error);
+		if (isset($conn)) {
+			// check connection is done or not
+			if ($conn->connect_error) {
+			  $this->sql_error = $conn->connect_error;
+			}else{
+				$this->conn = $conn;
+				$this->setCharset();
+				return $this;
+			}
+		}else{
+			throw new \Exception("Database '{$this->database}' does not exists");
 		}
-		$this->conn = $conn;
-		return $this;
 	}
 
 	/**
@@ -101,6 +135,7 @@ class Database{
 		if ($database!==null) {
 			$this->database = $database;
 		}
+		$this->conn();
 		return $this;
 	}
 
@@ -114,10 +149,14 @@ class Database{
 		if ($database!==null) {
 			$this->conn(false);
 			$sql = "CREATE DATABASE ".$database;
-			if ($this->conn->query($sql) === true) {
-				return "success";
+			if (!$this->dbExists()) {
+				if ($this->conn->query($sql) === true) {
+					return "success";
+				}else{
+					return "Error creating database: " . $this->conn->error;
+				}
 			}else{
-				return "Error creating database: " . $this->conn->error;
+				throw new \Exception("Database {$database} already exists");
 			}
 		}
 	}
@@ -130,8 +169,12 @@ class Database{
 	 **/
 	public function table($table=null){
 		if ($table!==null) {
-			$this->table = $table;
-			return $this;
+			if ($this->tableExists($table)) {
+				$this->table = $table;
+				return $this;
+			}else{
+				throw new \Exception("Table '{$table}' not exists in '{$this->database}' database");
+			}
 		}else{
 			throw new Exception(__CLASS__."->table() can't be null");
 		}
@@ -163,10 +206,9 @@ class Database{
 	 **/
 	public function setCharset($charset=null){
 		if ($charset!==null) {
-			return $this->conn->set_charset($charset);
-		}else{
-			return $this->conn->set_charset("utf8mb4");
+			$this->charset = $charset;
 		}
+		$this->conn->set_charset($this->charset);
 	}
 
 	/**
@@ -194,6 +236,127 @@ class Database{
 	 **/
 	public function distinct(){
 		$this->selector = "DISTINCT ".$this->selector;
+		return $this;
+	}
+
+	/**
+	 * selectDay
+	 * SELECT DAY(date_column)
+	 **/
+	public function selectDay($date_column=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="") {
+			if ($this->selector!==null) {
+				$this->selector .= ", DAY({$date_column})";
+			}else{
+				$this->selector = "DAY({$date_column})";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
+		return $this;
+	}
+
+	/**
+	 * selectWeek
+	 * SELECT WEEK(date_column)
+	 **/
+	public function selectWeek($date_column=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="") {
+			if ($this->selector!==null) {
+				$this->selector .= ", WEEK({$date_column})";
+			}else{
+				$this->selector = "WEEK({$date_column})";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
+		return $this;
+	}
+
+	/**
+	 * selectWeekDay
+	 * SELECT WEEKDAY(date_column)
+	 **/
+	public function selectWeekDay($date_column=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="") {
+			if ($this->selector!==null) {
+				$this->selector .= ", WEEKDAY({$date_column})";
+			}else{
+				$this->selector = "WEEKDAY({$date_column})";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
+		return $this;
+	}
+
+	/**
+	 * selectMonth
+	 * SELECT MONTH(date_column)
+	 **/
+	public function selectMonth($date_column=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="") {
+			if ($this->selector!==null) {
+				$this->selector .= ", MONTH({$date_column})";
+			}else{
+				$this->selector = "MONTH({$date_column})";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
+		return $this;
+	}
+
+	/**
+	 * selectYear
+	 * SELECT YEAR(date_column)
+	 **/
+	public function selectYear($date_column=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="") {
+			if ($this->selector!==null) {
+				$this->selector .= ", YEAR({$date_column})";
+			}else{
+				$this->selector = "YEAR({$date_column})";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
+		return $this;
+	}
+
+	/**
+	 * selectStrToDate
+	 * SELECT STR_TO_DATE(date_column, '%d-%m-%Y')
+	 **/
+	public function selectStrToDate($date_column=null, $format=null, $column_as=null){
+		if ($date_column!==null && $date_column!=="" && $format!==null) {
+			$format = dateFormat($format);
+			if ($this->selector!==null) {
+				$this->selector .= ", STR_TO_DATE({$date_column}, '{$format}')";
+			}else{
+				$this->selector = "STR_TO_DATE({$date_column}, '{$format}')";
+			}
+			if ($column_as!==null && $column_as!=="") {
+				$this->selector .= " as ".$column_as;
+			}
+		}else{
+			$this->selector = "*";
+		}
 		return $this;
 	}
 
@@ -393,7 +556,7 @@ class Database{
 			}
 			return $this;
 		}else{
-			throw new Exception(__CLASS__."->table() not set");
+			throw new \Exception(__CLASS__."->table() not set");
 		}
 	}
 
@@ -492,6 +655,82 @@ class Database{
 		}
 		return $this;
 
+	}
+
+	/**
+	 * it creates sql query for select columns from table
+	 * where MONTH(column) = some_value
+	 * 
+	 * @method whereMonth
+	 * @return Class object
+	 * "WHERE MONTH($date_column) = $value"
+	 **/
+	public function whereMonth($date_column=null, $value=null){
+		if ($date_column!==null && $value!==null) {
+			if ($this->where!==null) {
+				$this->where .= " AND MONTH({$date_column}) = '{$value}'";
+			}else{
+				$this->where = "MONTH({$date_column}) = '{$value}'";
+			}
+			return $this;
+		}
+	}
+	
+	/**
+	 * it creates sql query for select columns from table
+	 * where YEAR(column) = some_value
+	 * 
+	 * @method whereYear
+	 * @return Class object
+	 * "WHERE YEAR($date_column) = $value"
+	 **/
+	public function whereYear($date_column=null, $value=null){
+		if ($date_column!==null && $value!==null) {
+			if ($this->where!==null) {
+				$this->where .= " AND YEAR({$date_column}) = '{$value}'";
+			}else{
+				$this->where = "YEAR({$date_column}) = '{$value}'";
+			}
+			return $this;
+		}
+	}
+	
+	/**
+	 * it creates sql query for select columns from table
+	 * where MONTH(column) = some_value AND YEAR(column) = some_value"
+	 * 
+	 * @method whereMonthYear
+	 * @return Class object
+	 * "WHERE MONTH($date_column) = $value" AND YEAR($date_column) = $value"
+	 **/
+	public function whereMonthYear($date_column=null, $month_value=null, $year_value=null){
+		if ($date_column!==null && $month_value!==null && $year_value!==null) {
+			if ($this->where!==null) {
+				$this->where .= " AND MONTH({$date_column}) = '{$month_value}' AND YEAR({$date_column}) = '{$year_value}'";
+			}else{
+				$this->where = "MONTH({$date_column}) = '{$month_value}' AND YEAR({$date_column}) = '{$year_value}'";
+			}
+			return $this;
+		}
+	}
+	
+	/**
+	 * it creates sql query for select columns from table
+	 * where MONTH(column) = some_value OR YEAR(column) = some_value"
+	 * 
+	 * @method orWhereMonthYear
+	 * @return Class object
+	 * "WHERE MONTH($date_column) = $value" OR YEAR($date_column) = $value"
+	 **/
+	public function orWhereMonthYear($date_column=null, $month_value=null, $year_value=null){
+		if ($date_column!==null && $month_value!==null && $year_value!==null) {
+			if ($this->where!==null) {
+				$this->where .= " AND (MONTH({$date_column}) = '{$month_value}' OR YEAR({$date_column}) = '{$year_value}')";
+			}else{
+				$this->where = "MONTH({$date_column}) = '{$month_value}' OR YEAR({$date_column}) = '{$year_value}'";
+			}
+			return $this;
+		}
 	}
 
 	/**
@@ -687,7 +926,11 @@ class Database{
 			$this->resetResult()->get();
 			return $this->stmt;
 		}else{
-			return $this->stmt;
+			if (is_array($this->stmt)) {
+				return implode("<br>", $this->stmt);
+			}else{
+				return $this->stmt;
+			}
 		}
 	}
 
@@ -809,6 +1052,8 @@ class Database{
 		$this->order_by = null;
 		$this->limit = null;
 		$this->offset = null;
+		$this->selector = null;
+		$this->stmt = null;
 		$this->set = ["columns"=>[], "values"=>[]];
 		return $this;
 	}
@@ -847,6 +1092,14 @@ class Database{
 	 * 					set(["col" => "val",..])
 	 * 					set("col=val")
 	 * @param $value : string (column_value)
+	 * muti value array also taken in set method as column argument
+	 * like
+	 * array(
+	 *  "col1" => ["abc", "xyz", "pqr"],
+	 *  "col2" => ["abc", "xyz", "pqr"],
+	 *  "col3" => ["abc", "xyz", "pqr"],
+	 * )
+	 * this will prepare insert for multi value
 	 **/ 
 	public function set($column=null, $value=null){
 		if ($column!==null && $value!==null) {
@@ -861,7 +1114,15 @@ class Database{
 				$vals = array_values($column);
 				for ($i=0; $i < count($cols); $i++) { 
 					array_push($this->set["columns"], $this->escape($cols[$i]));
-					array_push($this->set["values"], $this->escape($vals[$i]));
+					if (is_array($vals[$i])) {
+						$valArr = [];
+						foreach ($vals[$i] as $val) {
+							array_push($valArr, $this->escape($val));
+						}
+						array_push($this->set["values"], $valArr);
+					}else{
+						array_push($this->set["values"], $this->escape($vals[$i]));
+					}
 				}
 			}elseif(count(explode("=", $column))===2){
 				// for ("col=val")
@@ -870,7 +1131,6 @@ class Database{
 				array_push($this->set["values"], $this->escape($strArray[1]));
 
 			}elseif(count(explode(",", $column))>=1){
-				// var_dump(explode(",", $column));
 				$strArray = (explode(",", $column)>=2) ? explode(",", $column) : $column;
 				// for ("col1, col2")
 				if (is_array($strArray)) {
@@ -916,7 +1176,23 @@ class Database{
 		}elseif($data===null){
 			// insert records collected by set method
 			if (count($this->set["columns"]) > 0 && count($this->set["values"]) > 0) {
-				$this->stmt = sprintf($this->stmt, "`".implode("`, `", $this->set["columns"])."`", '"'.implode('", "', $this->set["values"]).'"');
+				// if values are flat array
+				if (count($this->set["values"]) === count($this->set["values"], COUNT_RECURSIVE)) {
+					$this->stmt = sprintf($this->stmt, "`".implode("`, `", $this->set["columns"])."`", '"'.implode('", "', $this->set["values"]).'"');
+				}else{
+					// if values are multi dimentional array
+					$this->stmt = [];
+					for ($i=0; $i < count($this->set["values"][0]); $i++) {
+						$stmt = "INSERT INTO `{$this->table}` (%s) VALUES ";
+						$stmt = sprintf($stmt, "`".implode("`, `", $this->set["columns"])."`");
+						$vals = "(";
+						for($j=0; $j < count($this->set["values"]); $j++) {
+							$vals .= '"'.$this->set["values"][$j][$i].'",';
+						}
+						$stmt .= substr($vals, 0, -2).'")';
+						array_push($this->stmt, $stmt);
+					}
+				}
 				// if direct is true then insert records directly
 				// else it prepares sql for insert
 				if ($direct===true) {
@@ -930,46 +1206,6 @@ class Database{
 				}
 			}
 		}
-	}
-
-	/**
-	 * prepareInsert method
-	 **/
-	public function prepareInsert(){
-		// // prepare and bind
-		// $stmt = $conn->prepare("INSERT INTO MyGuests (firstname, lastname, email) VALUES (?, ?, ?)");
-		// $stmt->bind_param("sss", $firstname, $lastname, $email);
-
-		// // set parameters and execute
-		// $firstname = "John";
-		// $lastname = "Doe";
-		// $email = "john@example.com";
-		// $stmt->execute();
-
-		// echo "New records created successfully";
-
-		// $stmt->close();
-		// $conn->close();
-
-		// $array = ["name"=>"value"];
-		// extract($array);
-		// we can use $name as variable
-		// used to extract array keys as variables
-		//
-	}
-
-	/**
-	 * bind method
-	 **/
-	public function bind(){
-		//
-	}
-
-	/**
-	 * execute method
-	 **/
-	public function execute(){
-		//
 	}
 
 	/**
@@ -1110,72 +1346,37 @@ class Database{
 	 * this methods needs to call save() if not used set()->where()
 	 **/
 	public function save(){
-		if ($this->conn->query($this->stmt)===true) {
-			$this->status =  "success";
-			return true;
-		}else {
-			$this->status =  "Error: " . $this->stmt . "<br>" . $this->conn->error;
-			return false;
+		if (is_array($this->stmt)) {
+			$ret = true;
+			foreach ($this->stmt as $stmt) {
+				if ($this->conn->query($stmt)===true) {
+					$this->status =  "success";
+					$ret = true;
+				}else {
+					$this->status =  "Error: " . $stmt . "<br>" . $this->conn->error;
+					$ret = false;
+				}
+			}
+			return $ret;
+		}else{
+			if ($this->conn->query($this->stmt)===true) {
+				$this->status =  "success";
+				return true;
+			}else {
+				$this->status =  "Error: " . $this->stmt . "<br>" . $this->conn->error;
+				return false;
+			}
 		}
-
-	}
-
-	/* <------------------ { Helper Functions } ------------------> */
-
-	/**
-	 * @param $location : string (location to redirect)
-	 * @param $replace : optional replace parameter indicates whether
-	 * the header should replace a previous similar header,
-	 * or add a second header of the same type.
-	 * By default it will replace, but if you pass in false as the second argument
-	 * you can force multiple headers of the same type.
-	 **/
-	public function headerLocation($location=null,$replace=true){
-		return header("Location: {$location}", $replace);
-	}
-
-	public function addUserRole(){
-		$this->stmt = "CREATE TABLE `user_role` (
-						 `id` int NOT NULL AUTO_INCREMENT,
-						 `role` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',
-						 PRIMARY KEY (`id`)
-						) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-		return $this;
 	}
 
 	/**
 	 * this class uses destructor method simply to close connection
 	 **/
 	public function __destruct(){
-		$this->conn->close();
-	}
-}
-
-
-/**
- * ResultObject class
- *
- * @package supportive class
- * @author Harshal Khairnar
- **/
-class ResultObject{
-	/**
-	 * @method construct
-	 * @param $array : array
-	 **/
-	public function __construct($array){
-		$this->getArrayObject($array);
-	}
-	/**
-	 * @method getArrayObject
-	 * @param $array : array (array to conver to object)
-	 * @return class object
-	 **/
-	private function getArrayObject($array){
-		foreach ($array as $key => $value) {
-			$this->{$key} = [];
-			$this->{$key} = $array[$key];
+		try {
+			$this->conn->close();
+		} catch (mysqli_sql_exception $e) {
+			$this->sql_error = $e->__toString();
 		}
-		return $this;
 	}
 }
