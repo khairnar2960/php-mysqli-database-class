@@ -35,8 +35,7 @@ class Database{
 	private $insert_id = null;
 
 	// pagination properties
-	private $perPage;
-	private $page;
+	private $paginationLink = "";
 
 	public $sql_error;
 
@@ -136,6 +135,7 @@ class Database{
 			$this->database = $database;
 		}
 		$this->conn();
+		$this->resetResult();
 		return $this;
 	}
 
@@ -171,6 +171,7 @@ class Database{
 		if ($table!==null) {
 			if ($this->tableExists($table)) {
 				$this->table = $table;
+				$this->resetResult();
 				return $this;
 			}else{
 				throw new \Exception("Table '{$table}' not exists in '{$this->database}' database");
@@ -506,7 +507,11 @@ class Database{
 				}else{
 					$join_type = "";
 				}
-				$this->join = sprintf($this->joinFormat, $table, $column_on_column, $join_type);
+				if ($this->join!==null) {
+					$this->join .= " ".sprintf($this->joinFormat, $table, $column_on_column, $join_type);
+				}else{
+					$this->join = sprintf($this->joinFormat, $table, $column_on_column, $join_type);
+				}
 			}else{
 				throw new Exception("SQL Error columns not selected for JOIN");
 			}
@@ -889,13 +894,137 @@ class Database{
 
 	/**
 	 * paginate method to get pagination result
+	 * @uses $table->table("listings")->paginate(1)->get()->getResult();
+	 * to get pagination links use getPaginationLink method
+	 * 
 	 **/
-	public function paginate($perPage=10, $page=null){
-		$this->perPage = $perPage;
-		$this->page = $page;
+	public function paginate($limit=10, array $options=array()){
+		if (!isset ($_GET['page']) ) {
+			$page = 1;
+		} elseif ($_GET['page']<1) {
+			$page = 1;
+		} else {
+			$page = (int) $_GET['page'];
+		}
+		if ($limit<1) {
+			$this->limit = 1;
+		}else{
+			$this->limit = $limit;
+		}
+		$records = (int) $this->conn->query(
+			"SELECT COUNT(*) AS count FROM `{$this->table}`"
+		)->fetch_assoc()["count"];
+		$number_of_page = (int) ceil($records / $this->limit);
+		$this->offset = ($page-1) * $this->limit;
+		$this->limit($this->limit, $this->offset);
+		// Default Options
+		$default = array(
+			"container"					=>	"nav",
+			"container_class"			=>	"pagination-nav",
+			"container_aria_label"		=>	"Pagination pages",
+			"pagination_wraper"			=>	"ul",
+			"pagination_wraper_class"	=>	"pagination",
+			"pagination_item"			=>	"li",
+			"pagination_item_class"		=>	"page-item",
+			"pagination_link"			=>	"a",
+			"pagination_link_class"		=>	"page-link",
+			"prev_link"		=>	"&laquo;",
+			"next_link"		=>	"&raquo;",
+		);
+		if (count($options)>0) {
+			foreach ($options as $key => $value) {
+				$default[$key] = $value;
+			}
+		}
+		if ($records > $this->limit){
+			$pagination_item = '<%1$s class="%2$s">%3$s</%1$s>';
+			$pagination_link = '<%1$s class="%2$s" %3$s>%4$s</%1$s>';
+			$prevLink = sprintf(
+				$pagination_item,
+				$default["pagination_item"],
+				$default["pagination_item_class"].($page<=1 ? " disabled" : ''),
+				sprintf(
+					$pagination_link,
+					$default["pagination_link"],
+					$default["pagination_link_class"],
+					($page>1 ? 'href="?page='.($page-1).'"' : ''),
+					$default["prev_link"],
+				)
+			);
+			$links = "";
+			for($p = 1; $p<= $number_of_page; $p++) {
+				if ($p===$page) {
+					$links .= sprintf(
+						$pagination_item,
+						$default["pagination_item"],
+						$default["pagination_item_class"]." active",
+						sprintf(
+							$pagination_link,
+							$default["pagination_link"],
+							$default["pagination_link_class"],
+							"",
+							$p
+						)
+					);
+				}else{
+				  if (($p>= ($page-3) && $p<= ($page+3))) {
+					$links .= sprintf(
+						$pagination_item,
+						$default["pagination_item"],
+						$default["pagination_item_class"],
+						sprintf(
+							$pagination_link,
+							$default["pagination_link"],
+							$default["pagination_link_class"],
+							"href='?page={$p}'",
+							$p
+						)
+					);
+				  }
+				}
+			}
+			$nextLink = sprintf(
+				$pagination_item,
+				$default["pagination_item"],
+				$default["pagination_item_class"].($page===$number_of_page ? " disabled" : ''),
+				sprintf(
+					$pagination_link,
+					$default["pagination_link"],
+					$default["pagination_link_class"],
+					($page<$number_of_page ? 'href="?page='.($page+1).'"' : ''),
+					$default["next_link"],
+				)
+			);
+			$wraper = sprintf(
+				'<%1$s class="%2$s">%3$s</%1$s>',
+				$default["pagination_wraper"],
+				$default["pagination_wraper_class"],
+				$prevLink.$links.$nextLink
+			);
+			$container = sprintf(
+				'<%1$s class="%2$s" aria-label="%3$s">%4$s</%1$s>',
+				$default["container"],
+				$default["container_class"],
+				$default["container_aria_label"],
+				$wraper
+			);
+			$this->paginationLink = $container;
+		}
 		return $this;
 	}
 
+	/**
+	 * @method getPaginationLink
+	 * @return pagination liks
+	 * to echo by default pass true arg
+	 **/
+	public function getPaginationLink($echo=false){
+		if ($echo===true) {
+			echo $this->paginationLink;
+		}else{
+			return $this->paginationLink;
+		}
+	}
 
 	// limit method
 	public function limit($limit=null, $offset=null){
@@ -961,8 +1090,10 @@ class Database{
 			while($row = $data->fetch_assoc()) {
 				array_push($this->result, new ResultObject($row));
 			}
+			return $this->result;
+		}else{
+			return false;
 		}
-		return $this->result;
 	}
 
 	/**
@@ -1000,16 +1131,19 @@ class Database{
 			while($row = $data->fetch_assoc()) {
 				array_push($this->result, new ResultObject($row));
 			}
-		}
-		// for +ve index
-		if (isset($this->result[$row_index])) {
-			return $this->result[$row_index];
-		}elseif ($row_index<0){
-			// this will return negative indexed object
-			return $this->result[count($this->result)+$row_index];
+			// for +ve index
+			if (isset($this->result[$row_index])) {
+				return $this->result[$row_index];
+			}elseif ($row_index<0){
+				// this will return negative indexed object
+				return $this->result[count($this->result)+$row_index];
+			}else{
+				return false;
+			}
 		}else{
-			return null;
+			return false;
 		}
+
 	}
 
 
@@ -1054,6 +1188,7 @@ class Database{
 		$this->offset = null;
 		$this->selector = null;
 		$this->stmt = null;
+		$this->join = null;
 		$this->set = ["columns"=>[], "values"=>[]];
 		return $this;
 	}
