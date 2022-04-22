@@ -15,7 +15,11 @@ class Database{
 	private $database = 'test';
 	private $table = null;
 	private $conn;
+
+	// SQL server properties
+	private $engine = "InnoDB";
 	private $charset = "utf8mb4";
+	private $collate = "utf8mb4_unicode_ci";
 
 	// MySQL properties
 	private $stmt = null;
@@ -66,9 +70,9 @@ class Database{
 		}
 	}
 
-	protected function dbExists(){
+	protected function dbExists($database){
 		$this->conn(false);
-		$result = $this->conn->query("SHOW DATABASES LIKE '{$this->database}'");
+		$result = $this->conn->query("SHOW DATABASES LIKE '{$database}'");
 		if ($result->num_rows > 0) {
 			return true;
 		}else{
@@ -92,7 +96,7 @@ class Database{
 	 * if $db=false it will return connection without database
 	 **/
 	private function conn($db=true){
-		if ($db===true && $this->dbExists()) {
+		if ($db===true && $this->dbExists($this->database)) {
 			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database);
 		}elseif($db===false){
 			$conn = new \mysqli($this->server, $this->user, $this->password);
@@ -145,11 +149,14 @@ class Database{
 	 * returns (success : string) if true
 	 * else returns (Error : string)
 	 **/
-	public function createDatabase($database=null){
+	public function createDatabase($database=null, $encrypt=false){
 		if ($database!==null) {
 			$this->conn(false);
-			$sql = "CREATE DATABASE ".$database;
-			if (!$this->dbExists()) {
+			$sql = "CREATE DATABASE IF NOT EXISTS {$database} CHARACTER SET={$this->charset} COLLATE={$this->collate}";
+			if ($encrypt===true) {
+				$sql .= " ENCRYPTION='Y'";
+			}
+			if (!$this->dbExists($database)) {
 				if ($this->conn->query($sql) === true) {
 					return "success";
 				}else{
@@ -158,6 +165,26 @@ class Database{
 			}else{
 				throw new \Exception("Database {$database} already exists");
 			}
+		}
+	}
+
+	public function createTable($table=null){
+		if ($table!==null) {
+			$this->table = $table;
+		}
+		$this->stmt = "CREATE TABLE IF NOT EXISTS `{$this->table}`";
+		return $this;
+	}
+
+	public function renameTable($rename_to=null, $table=null){
+		if ($rename_to!==null) {
+			if ($table!==null) {
+				$this->table = $table;
+			}
+			$this->stmt = "ALTER TABLE `{$this->table}` RENAME `{$rename_to}`";
+			return $this;
+		}else{
+			throw new \Exception("Empty Table Name");
 		}
 	}
 
@@ -185,12 +212,17 @@ class Database{
 	 * escape method for mysqli::real_escape_string()
 	 * @param $string : string (value_to_insert)
 	 **/
-	private function escape($string=null){
+	public function escape($string=null){
 		if ($string!==null) {
 			return $this->conn->real_escape_string($string);
 		}
 	}
-
+	public function query($stmt=null){
+		if ($stmt!==null && $stmt!=="") {
+			$this->stmt = $stmt;
+		}
+		return $this;
+	}
 	/**
 	 * getCharset method for mysqli::character_set_name()
 	 * returns charset of database

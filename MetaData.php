@@ -3,6 +3,8 @@
 class MetaData{
 	// SearchEngine
 	public $lang = "en_IN";
+	public $charset = "UTF-8";
+	public $viewport = "width=device-width, initial-scale=1.0";
 	public $title = null;
 	public $sitename = null;
 	public $desc = null;
@@ -120,11 +122,18 @@ class MetaData{
 			}
 		}
 		$tags = "\t<!-- SEO Tags -->\n";
+		if ($this->charset!==null) {
+			$tags .= "\t<meta charset='{$this->charset}'>\n";
+		}
+		if ($this->viewport!==null) {
+			$tags .= "\t<meta name='viewport' content='{$this->viewport}'>\n";
+		}
 		if ($this->title!==null) {
 			$tags .= $this->pageTitle();
 			$tags .= "\t<meta name='title' content='{$this->title}'>\n";
 		}
 		if ($this->image!==null) {
+			$tags .= "\t<meta name='thumbnail' content='{$this->image}'>\n";
 			$tags .= "\t<meta name='image' content='{$this->image}'>\n";
 		}
 		if ($this->desc!==null) {
@@ -270,6 +279,7 @@ class MetaData{
 
 
 $meta = new MetaData();
+$meta->lang = "en_US";
 $meta->title = "Harshal Khairnar | Portfolio";
 // $meta->sitename = "Harshal Khairnar";
 $meta->desc = "160 char description";
@@ -289,4 +299,14 @@ $meta->article = [
 
 $meta->fb_app_id = "1313931599118305";
 $meta->facebook_domain_verification = "klevhj2dfye4hcds1e53u84euxpdgl";
-echo $meta->getAll();
+$key = 1;
+foreach (explode("\n", htmlspecialchars($meta->getAll())) as $value) {
+	if (!strpos($value, "&lt;!-")) {
+		if ($key<10) {
+			$key = "0".$key;
+		}
+		$value = "{$key}] {$value}";
+		$key++;
+	}
+	echo $value."<br>";
+}
