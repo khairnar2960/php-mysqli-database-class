@@ -20,6 +20,7 @@ class Database{
 	private $engine = "InnoDB";
 	private $charset = "utf8mb4";
 	private $collate = "utf8mb4_unicode_ci";
+	private $time_zone = "+05:30";
 
 	// MySQL properties
 	private $stmt = null;
@@ -108,6 +109,7 @@ class Database{
 			}else{
 				$this->conn = $conn;
 				$this->setCharset();
+				$this->setTimeZone();
 				return $this;
 			}
 		}else{
@@ -242,6 +244,20 @@ class Database{
 			$this->charset = $charset;
 		}
 		$this->conn->set_charset($this->charset);
+	}
+
+	/**
+	 * setTimeZone method for set session time_zone
+	 * @param $time_zone string (ex. "+05:30")
+	 * It sets time_zone for mysqli server session
+	 * default is "+05:30"
+	 **/
+	public function setTimeZone($time_zone=null){
+		if ($time_zone!==null) {
+			$this->time_zone = $time_zone;
+		}
+		$this->conn->query("SET time_zone = '{$this->time_zone}'");
+		return $this;
 	}
 
 	/**
@@ -960,8 +976,8 @@ class Database{
 			"pagination_item_class"		=>	"page-item",
 			"pagination_link"			=>	"a",
 			"pagination_link_class"		=>	"page-link",
-			"prev_link"		=>	"&laquo;",
-			"next_link"		=>	"&raquo;",
+			"prev_link"					=>	"&laquo;",
+			"next_link"					=>	"&raquo;",
 		);
 		if (count($options)>0) {
 			foreach ($options as $key => $value) {

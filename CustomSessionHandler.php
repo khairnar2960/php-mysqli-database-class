@@ -107,7 +107,7 @@ class CustomSessionHandler implements SessionHandlerInterface{
         }
     }
 }
-$handler = new CustomSessionHandler;
+new CustomSessionHandler;
 session_start();
 if (!isset($_SESSION['user'])) {
     $_SESSION['user'] = "harshal";
@@ -115,6 +115,5 @@ if (!isset($_SESSION['user'])) {
     $_SESSION['password'] = "harshal@123";
 }
 // session_destroy();
-// session_gc();
 var_dump($_SESSION);
 
