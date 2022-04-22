@@ -88,11 +88,11 @@ class Model{
 	public function DecimalField($max_digits=10, $decimal_places=2, $default=false, $unsigned=false){
 		return "decimal({$max_digits}, {$decimal_places}){$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
 	}
-	public function FloatField($default=false, $unsigned=false){
-		return "float{$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
+	public function FloatField($max_digits=10, $decimal_places=2, $default=false, $unsigned=false){
+		return "float({$max_digits}, {$decimal_places}){$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
 	}
-	public function DoubleField($default=false, $unsigned=false){
-		return "double{$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
+	public function DoubleField($max_digits=10, $decimal_places=2, $default=false, $unsigned=false){
+		return "double({$max_digits}, {$decimal_places}){$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
 	}
 	
 
