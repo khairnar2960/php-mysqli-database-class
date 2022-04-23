@@ -25,7 +25,7 @@ class Database{
 	// MySQL properties
 	private $stmt = null;
 	private $selector = null;
-	private $joinFormat = '%3$s JOIN %1$s ON %2$s';
+	private $joinFormat = '%3$s JOIN `%1$s` ON %2$s';
 	private $join = null;
 	private $limit = null;
 	private $offset = null;
@@ -33,6 +33,7 @@ class Database{
 	private $group_by = null;
 	private $order_by = null;
 	private $set = ["columns"=>[], "values"=>[]];
+	public $sql_error = false;
 
 	// output properties
 	private $result = [];
@@ -41,8 +42,6 @@ class Database{
 
 	// pagination properties
 	private $paginationLink = "";
-
-	public $sql_error;
 
 	/**
 	 * constructor method creates database connection
@@ -198,15 +197,22 @@ class Database{
 	 **/
 	public function table($table=null){
 		if ($table!==null) {
-			if ($this->tableExists($table)) {
+			$tables = array_filter(preg_split("/[\s,]+/", $table), function($e){return strlen($e)>1;});
+			if (count($tables)<=1) {
+				if ($this->tableExists($table)) {
+					$this->table = $table;
+					$this->resetResult();
+					return $this;
+				}else{
+					throw new \Exception("Table '{$table}' not exists in '{$this->database}' database");
+				}
+			}else{
 				$this->table = $table;
 				$this->resetResult();
 				return $this;
-			}else{
-				throw new \Exception("Table '{$table}' not exists in '{$this->database}' database");
 			}
 		}else{
-			throw new Exception(__CLASS__."->table() can't be null");
+			throw new \Exception(__CLASS__."->table() can't be null");
 		}
 	}
 
@@ -266,13 +272,15 @@ class Database{
 	 **/
 	public function select($column=null, $column_as=null){
 		if ($column!==null && $column!=="") {
+			$column = $this->escape($column);
+			$column_as = $this->escape($column_as);
 			if ($this->selector!==null) {
 				$this->selector .= ", {$column}";
 			}else{
 				$this->selector = $column;
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS `{$column_as}`";
 			}
 		}else{
 			$this->selector = "*";
@@ -300,7 +308,7 @@ class Database{
 				$this->selector = "DAY({$date_column})";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -320,7 +328,7 @@ class Database{
 				$this->selector = "WEEK({$date_column})";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -340,7 +348,7 @@ class Database{
 				$this->selector = "WEEKDAY({$date_column})";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -360,7 +368,7 @@ class Database{
 				$this->selector = "MONTH({$date_column})";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -380,7 +388,7 @@ class Database{
 				$this->selector = "YEAR({$date_column})";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -401,7 +409,7 @@ class Database{
 				$this->selector = "STR_TO_DATE({$date_column}, '{$format}')";
 			}
 			if ($column_as!==null && $column_as!=="") {
-				$this->selector .= " as ".$column_as;
+				$this->selector .= " AS ".$column_as;
 			}
 		}else{
 			$this->selector = "*";
@@ -413,9 +421,9 @@ class Database{
 	 * selectMin selects MIN(column) from table
 	 * @param $column : string (column_name)
 	 * @param $column_as : string (column_name as)
-	 * ex. query = SELECT MIN(age) as age FROM mytable
+	 * ex. query = SELECT MIN(age) AS age FROM mytable
 	 * will be called selectMin("age")
-	 * ex. query = SELECT MIN(age) as xyz FROM mytable
+	 * ex. query = SELECT MIN(age) AS xyz FROM mytable
 	 * will be called selectMin("age","xyz")
 	 **/
 	public function selectMin($column=null, $column_as=null){
@@ -423,9 +431,9 @@ class Database{
 			$selector = "MIN({$column})";
 		}
 		if ($column_as!==null){
-			$selector .= " as {$column_as}";
+			$selector .= " AS {$column_as}";
 		}else{
-			$selector .= " as {$column}";
+			$selector .= " AS {$column}";
 		}
 		$this->selector = $selector;
 		return $this;
@@ -435,9 +443,9 @@ class Database{
 	 * selectMax selects MAX(column) from table
 	 * @param $column : string (column_name)
 	 * @param $column_as : string (column_name as)
-	 * ex. query = SELECT MAX(age) as age FROM mytable
+	 * ex. query = SELECT MAX(age) AS age FROM mytable
 	 * will be called selectMax("age")
-	 * ex. query = SELECT MAX(age) as xyz FROM mytable
+	 * ex. query = SELECT MAX(age) AS xyz FROM mytable
 	 * will be called selectMax("age","xyz")
 	 **/
 	public function selectMax($column=null, $column_as=null){
@@ -445,9 +453,9 @@ class Database{
 			$selector = "MAX({$column})";
 		}
 		if ($column_as!==null){
-			$selector .= " as {$column_as}";
+			$selector .= " AS {$column_as}";
 		}else{
-			$selector .= " as {$column}";
+			$selector .= " AS {$column}";
 		}
 		$this->selector = $selector;
 		return $this;
@@ -457,9 +465,9 @@ class Database{
 	 * selectAvg selects AVG(column) from table
 	 * @param $column : string (column_name)
 	 * @param $column_as : string (column_name as)
-	 * ex. query = SELECT AVG(age) as age FROM mytable
+	 * ex. query = SELECT AVG(age) AS age FROM mytable
 	 * will be called selectAvg("age")
-	 * ex. query = SELECT AVG(age) as xyz FROM mytable
+	 * ex. query = SELECT AVG(age) AS xyz FROM mytable
 	 * will be called selectAvg("age","xyz")
 	 **/
 	public function selectAvg($column=null, $column_as=null){
@@ -467,9 +475,9 @@ class Database{
 			$selector = "AVG({$column})";
 		}
 		if ($column_as!==null){
-			$selector .= " as {$column_as}";
+			$selector .= " AS {$column_as}";
 		}else{
-			$selector .= " as {$column}";
+			$selector .= " AS {$column}";
 		}
 		$this->selector = $selector;
 		return $this;
@@ -479,9 +487,9 @@ class Database{
 	 * selectSum selects SUM(column) from table
 	 * @param $column : string (column_name)
 	 * @param $column_as : string (column_name as)
-	 * ex. query = SELECT SUM(age) as age FROM mytable
+	 * ex. query = SELECT SUM(age) AS age FROM mytable
 	 * will be called selectSum("age")
-	 * ex. query = SELECT SUM(age) as xyz FROM mytable
+	 * ex. query = SELECT SUM(age) AS xyz FROM mytable
 	 * will be called selectSum("age","xyz")
 	 * to get output use Database()->get()->getRow()
 	 **/
@@ -490,9 +498,9 @@ class Database{
 			$selector = "SUM({$column})";
 		}
 		if ($column_as!==null){
-			$selector .= " as {$column_as}";
+			$selector .= " AS {$column_as}";
 		}else{
-			$selector .= " as {$column}";
+			$selector .= " AS {$column}";
 		}
 		$this->selector = $selector;
 		return $this;
@@ -502,9 +510,9 @@ class Database{
 	 * selectCount selects COUNT(column) from table
 	 * @param $column : string (column_name)
 	 * @param $column_as : string (column_name as)
-	 * ex. query = SELECT COUNT(age) as count_age FROM mytable
+	 * ex. query = SELECT COUNT(age) AS count_age FROM mytable
 	 * will be called selectCount("age")
-	 * ex. query = SELECT COUNT(age) as xyz FROM mytable
+	 * ex. query = SELECT COUNT(age) AS xyz FROM mytable
 	 * will be called selectCount("age","xyz")
 	 **/
 	public function selectCount($column=null, $column_as=null){
@@ -515,9 +523,9 @@ class Database{
 		}
 		if (($column!==null || $column!=="") && ($column_as===null || $column_as==="")){
 			$selector .= "";
-			// $selector .= " as count_{$column}";
+			// $selector .= " AS count_{$column}";
 		}elseif($column_as!==null){
-			$selector .= " as {$column_as}";
+			$selector .= " AS {$column_as}";
 		}
 		if ($this->selector!==null) {
 			$this->selector .= ", {$selector}";
@@ -549,22 +557,27 @@ class Database{
 	 **/
 	public function join($table=null, $column_on_column=null, $join_type=null){
 		if ($table!==null) {
-			if ($column_on_column!==null) {
-				if ($join_type!==null) {
-					$join_type = strtoupper($join_type);
-				}else{
-					$join_type = "";
-				}
+			if ($join_type!==null) {
+				$join_type = strtoupper($join_type);
+			}else{
+				$join_type = "";
+			}
+			if ($column_on_column!==null && $column_on_column!=="") {
 				if ($this->join!==null) {
 					$this->join .= " ".sprintf($this->joinFormat, $table, $column_on_column, $join_type);
 				}else{
 					$this->join = sprintf($this->joinFormat, $table, $column_on_column, $join_type);
 				}
 			}else{
-				throw new Exception("SQL Error columns not selected for JOIN");
+				$this->joinFormat = '%2$s JOIN `%1$s`';
+				if ($this->join!==null) {
+					$this->join .= " ".sprintf($this->joinFormat, $table, $join_type);
+				}else{
+					$this->join = sprintf($this->joinFormat, $table, $join_type);
+				}
 			}
 		}else{
-			throw new Exception("SQL Error table not selected for JOIN");
+			throw new \Exception("SQL Error table not selected for JOIN");
 		}
 		return $this;
 	}
@@ -582,7 +595,7 @@ class Database{
 				$this->select();
 			}
 			// SQL statement
-			$this->stmt = "SELECT {$this->selector} FROM ".$this->table;
+			$this->stmt = "SELECT {$this->selector} FROM {$this->table}";
 			// (LEFT/RIGHT/INNER) JOIN table1 ON table1.column = table2.column
 			if ($this->join!==null) {
 				$this->stmt .= " {$this->join}";
@@ -617,7 +630,7 @@ class Database{
 	 * where method
 	 * @param $where : array/string
 	 * #array : if array then must be ["column"=>"value"]
-	 * it will parse query as column='value'
+	 * it will parse query AS column='value'
 	 * ======================================================
 	 * #string : is string given it must be
 	 * "column <delim> value"
@@ -636,11 +649,11 @@ class Database{
 	 * then query = (...WHERE col1='val1' AND col2='val2' AND col3='val3')
 	 * ======================================================
 	 * if want to change AND/OR clause
-	 * then specify as second argument
+	 * then specify AS second argument
 	 * ex. where(col2=val2, "or")
 	 * ======================================================
 	 * if $where is string and and_or != "AND/OR"
-	 * then it will parse both arguments as seperate column and value
+	 * then it will parse both arguments AS seperate column and value
 	 * ex. where("column","value")
 	 * #=> WHERE column='value'
 	 * ======================================================
@@ -687,7 +700,14 @@ class Database{
 			 */
 
 			$where = preg_split("/([\=\<\>\!]+)/", $where,-1,PREG_SPLIT_DELIM_CAPTURE);
-			$where = $where[0].$where[1]."'".trim($where[2],"'\"")."'";
+			$where2 = $where[2];
+			$where = trim($where[0]).$where[1];
+			$is_col = explode(".", $where2);
+			if (count($is_col)>1) {
+				$where .= trim($where2," '\"");
+			}else{
+				$where .="'".trim($where2," '\"")."'";
+			}
 			if ($this->where!==null) {
 				$this->where .= " {$and_or} ".$where;
 			}else{
@@ -708,6 +728,88 @@ class Database{
 		}
 		return $this;
 
+	}
+
+	/**
+	 * @method whereIn
+	 * @return Class object
+	 * 'WHERE some_column IN ("option-1", "option-1",...)'
+	 * it adds AND claus if called again
+	 **/
+	public function whereIn($column, $list=null){
+		$column = $this->escape($column);
+		$list = is_array($list) ? "('".implode("', '", $list)."')" : $list;
+		if ($this->where!==null) {
+			$this->where .= " AND `{$column}` IN {$list}";
+		}else{
+			$this->where = "`{$column}` IN {$list}";
+		}
+		return $this;
+	}
+
+	/**
+	 * @method orWhereIn
+	 * @return Class object
+	 * 'WHERE some_column IN ("option-1", "option-1",...)'
+	 * it adds OR claus if called again
+	 **/
+	public function orWhereIn($column, $list=null){
+		$column = $this->escape($column);
+		$list = is_array($list) ? "('".implode("', '", $list)."')" : $list;
+		if ($this->where!==null) {
+			$this->where .= " OR `{$column}` IN {$list}";
+		}else{
+			$this->where = "`{$column}` IN {$list}";
+		}
+		return $this;
+	}
+
+	/**
+	 * @method whereNotIn
+	 * @return Class object
+	 * 'WHERE some_column NOT IN ("option-1", "option-1",...)'
+	 * it adds AND claus if called again
+	 **/
+	public function whereNotIn($column, $list=null){
+		$column = $this->escape($column);
+		$list = is_array($list) ? "('".implode("', '", $list)."')" : $list;
+		if ($this->where!==null) {
+			$this->where .= " AND `{$column}` NOT IN {$list}";
+		}else{
+			$this->where = "`{$column}` NOT IN {$list}";
+		}
+		return $this;
+	}
+
+	/**
+	 * @method orWhereNotIn
+	 * @return Class object
+	 * 'WHERE some_column NOT IN ("option-1", "option-1",...)'
+	 * it adds OR claus if called again
+	 **/
+	public function orWhereNotIn($column, $list=null){
+		$column = $this->escape($column);
+		$list = is_array($list) ? "('".implode("', '", $list)."')" : $list;
+		if ($this->where!==null) {
+			$this->where .= " OR `{$column}` NOT IN {$list}";
+		}else{
+			$this->where = "`{$column}` NOT IN {$list}";
+		}
+		return $this;
+	}
+
+	/**
+	 * @method selectFrom
+	 * @return (string)
+	 * it completes remaining portion for whereIn
+	 * '(SELECT `column_select` FROM `table_from`)'
+	 * @uses
+	 * $table->WhereIn("column1", $table->selectFrom("column2", "table2"));
+	 **/
+	public function selectFrom($column_select, $table_from){
+		$column = $this->escape($column_select);
+		$table = $this->escape($table_from);
+		return "(SELECT `{$column}` FROM `{$table}`)";
 	}
 
 	/**
@@ -787,7 +889,7 @@ class Database{
 	}
 
 	/**
-	 * getWhere method same as where method
+	 * getWhere method same AS where method
 	 * it takes additional argument
 	 * @param $limit : refer limit() method for additional info
 	 * @param $offset : refer limit() method for additional info
@@ -912,8 +1014,17 @@ class Database{
 		}
 		if ($column!==null && $option===null) {
 			$raw = explode(" ", $column);
-			$column = $raw[0];
-			$option = $raw[1];
+			$raw1 = explode(".", $column);
+			if (count($raw)>1) {
+				$column = $raw[0];
+				$option = $raw[1];
+			}elseif (count($raw1)>1){
+				$column = $raw1[0];
+				$option = ".`{$raw1[1]}`";
+			}else{
+				$column = $raw[0];
+				$option = null;
+			}
 			if ($this->order_by!==null) {
 				$this->order_by .= ", `{$column}` {$option}";
 			}else{	
@@ -925,14 +1036,14 @@ class Database{
 					$option = " RAND()";
 					$this->order_by .= "{$option}";
 				}else{
-					$this->order_by .= ", `{$column}` {$option}";
+					$this->order_by .= ", {$column} {$option}";
 				}
 			}else{
 				if ($option=="RANDOM") {
 					$option = " RAND()";
 					$this->order_by = "{$option}";
 				}else{
-					$this->order_by = "`{$column}` {$option}";
+					$this->order_by = "{$column} {$option}";
 				}
 			}
 		}
@@ -980,7 +1091,7 @@ class Database{
 			"next_link"					=>	"&raquo;",
 		);
 		if (count($options)>0) {
-			foreach ($options as $key => $value) {
+			foreach ($options AS $key => $value) {
 				$default[$key] = $value;
 			}
 		}
@@ -1112,7 +1223,7 @@ class Database{
 	}
 
 	/**
-	 * getResult method gets result as object array
+	 * getResult method gets result AS object array
 	 * @uses ResultObject Class to get object of result
 	 * 
 	 * ex.
@@ -1123,7 +1234,7 @@ class Database{
 	 * $table->select("col1, col2, col3");
 	 * $table->get();
 	 * $query = $table->getResult();
-	 * foreach ($query as $row) {
+	 * foreach ($query AS $row) {
 	 * 	echo $row->col1;
 	 * 	echo $row->col2;
 	 * 	echo $row->col3;
@@ -1134,35 +1245,39 @@ class Database{
 		$data = $this->conn->query($this->stmt);
 		$this->num_rows = $data->num_rows;
 		if ($this->num_rows > 0) {
-			// output data of each row as associative array
+			// output data of each row AS associative array
 			while($row = $data->fetch_assoc()) {
 				array_push($this->result, new ResultObject($row));
 			}
 			return $this->result;
 		}else{
+			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
 			return false;
 		}
 	}
 
 	/**
-	 * getResultArray method gets result as associative array
+	 * getResultArray method gets result AS associative array
 	 **/
 	public function getResultArray(){
 		$this->result = [];
 		$data = $this->conn->query($this->stmt);
 		$this->num_rows = $data->num_rows;
 		if ($this->num_rows > 0) {
-			// output data of each row as associative array
+			// output data of each row AS associative array
 			while($row = $data->fetch_assoc()) {
 				array_push($this->result, $row);
 			}
+			return $this->result;
+		}else{
+			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+			return false;
 		}
-		return $this->result;
 	}
 
 
 	/**
-	 * getRow method gets row as object
+	 * getRow method gets row AS object
 	 * @param $row_index : int (row number)
 	 * (0 for 1st)
 	 * (1 for 2nd)...
@@ -1186,9 +1301,11 @@ class Database{
 				// this will return negative indexed object
 				return $this->result[count($this->result)+$row_index];
 			}else{
+				$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
 				return false;
 			}
 		}else{
+			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
 			return false;
 		}
 
@@ -1196,7 +1313,7 @@ class Database{
 
 
 	/**
-	 * getRowArray method gets row as array
+	 * getRowArray method gets row AS array
 	 * @param $row_index : int (row number)
 	 * (0 for 1st)
 	 * (1 for 2nd)...
@@ -1275,7 +1392,7 @@ class Database{
 	 * 					set(["col" => "val",..])
 	 * 					set("col=val")
 	 * @param $value : string (column_value)
-	 * muti value array also taken in set method as column argument
+	 * muti value array also taken in set method AS column argument
 	 * like
 	 * array(
 	 *  "col1" => ["abc", "xyz", "pqr"],
@@ -1299,7 +1416,7 @@ class Database{
 					array_push($this->set["columns"], $this->escape($cols[$i]));
 					if (is_array($vals[$i])) {
 						$valArr = [];
-						foreach ($vals[$i] as $val) {
+						foreach ($vals[$i] AS $val) {
 							array_push($valArr, $this->escape($val));
 						}
 						array_push($this->set["values"], $valArr);
@@ -1317,7 +1434,7 @@ class Database{
 				$strArray = (explode(",", $column)>=2) ? explode(",", $column) : $column;
 				// for ("col1, col2")
 				if (is_array($strArray)) {
-					foreach ($strArray as $column) {
+					foreach ($strArray AS $column) {
 						array_push($this->set["columns"], $this->escape($column));
 					}
 				}else{
@@ -1349,7 +1466,7 @@ class Database{
 		if ($data!==null && is_array($data)) {
 			// prepare insert query for save method
 			if (count($data)>0) {
-				foreach($data as $col => $val) {
+				foreach($data AS $col => $val) {
 					array_push($columns, $this->escape($col));
 					array_push($values, $this->escape($val));
 				}
@@ -1392,7 +1509,75 @@ class Database{
 	}
 
 	/**
-	 * to update multiple records try 'column1=value, column2=value2,...' as param
+	 * replace method prepare sql query to replace data
+	 * @param $data : array (takes ["column"=>"value",...])
+	 * to save this records must run save() method after replace method
+	 * @param $direct : bool (false| dont replace records directly)
+	 * 						 (true | replace records directly)
+	 * 						 (default | false)
+	 * ========================================================
+	 * if used with set method it directly replace records on replace() method call
+	 * ex.	set("column","value")
+	 * 		replace()
+	 * it will directly replaces record set by set() method 
+	 * ========================================================
+	 * ------------------------{ Note }------------------------
+	 * REPLACE Statement insert records | delete & insert records
+	 * it can't be chained with where Statement
+	 * --------------------------------------------------------
+	 * ========================================================
+	 **/
+	public function replace($data=null, $direct=false){
+		$columns = [];
+		$values = [];
+		$this->stmt = "REPLACE INTO `{$this->table}` (%s) VALUES (%s)";
+		if ($data!==null && is_array($data)) {
+			// prepare replace query for save method
+			if (count($data)>0) {
+				foreach($data AS $col => $val) {
+					array_push($columns, $this->escape($col));
+					array_push($values, $this->escape($val));
+				}
+				$this->stmt = sprintf($this->stmt, "`".implode("`, `", $columns)."`", '"'.implode('", "', $values).'"');
+			}
+			return $this;
+		}elseif($data===null){
+			// replace records collected by set method
+			if (count($this->set["columns"]) > 0 && count($this->set["values"]) > 0) {
+				// if values are flat array
+				if (count($this->set["values"]) === count($this->set["values"], COUNT_RECURSIVE)) {
+					$this->stmt = sprintf($this->stmt, "`".implode("`, `", $this->set["columns"])."`", '"'.implode('", "', $this->set["values"]).'"');
+				}else{
+					// if values are multi dimentional array
+					$this->stmt = [];
+					for ($i=0; $i < count($this->set["values"][0]); $i++) {
+						$stmt = "REPLACE INTO `{$this->table}` (%s) VALUES ";
+						$stmt = sprintf($stmt, "`".implode("`, `", $this->set["columns"])."`");
+						$vals = "(";
+						for($j=0; $j < count($this->set["values"]); $j++) {
+							$vals .= '"'.$this->set["values"][$j][$i].'",';
+						}
+						$stmt .= substr($vals, 0, -2).'")';
+						array_push($this->stmt, $stmt);
+					}
+				}
+				// if direct is true then replace records directly
+				// else it prepares sql for replace
+				if ($direct===true) {
+					if ($this->save()) {
+						return true;
+					}else{
+						return false;
+					}
+				}else{
+					return $this;
+				}
+			}
+		}
+	}
+
+	/**
+	 * to update multiple records try 'column1=value, column2=value2,...' AS param
 	 * update("column=value", "col=val")
 	 * @param $direct : bool (direct update | false)
 	 * if set true it will directly update records
@@ -1432,7 +1617,7 @@ class Database{
 			 * this needs to save() method call
 			 */
 			$this->where($where);
-			foreach ($data as $cols => $vals) {
+			foreach ($data AS $cols => $vals) {
 				$set .= " {$cols}='{$vals}'";
 			}
 			$this->stmt .= "{$set} WHERE ".$this->where;
@@ -1460,10 +1645,10 @@ class Database{
 					return $this;
 				}
 			}else{
-				throw new Exception("SQL Error WHERE not set for UPDATE");
+				throw new \Exception("SQL Error WHERE not set for UPDATE");
 			}
 		}else{
-			throw new Exception("SQL Error columns not set for UPDATE");
+			throw new \Exception("SQL Error columns not set for UPDATE");
 		}
 	}
 
@@ -1491,7 +1676,7 @@ class Database{
 			$this->stmt = sprintf($this->stmt, $this->where);
 			return $this;
 		}else{
-			throw new Exception("SQL Error WHERE not set");
+			throw new \Exception("SQL Error WHERE not set");
 		}
 
 		if ($direct===true) {
@@ -1531,12 +1716,12 @@ class Database{
 	public function save(){
 		if (is_array($this->stmt)) {
 			$ret = true;
-			foreach ($this->stmt as $stmt) {
+			foreach ($this->stmt AS $stmt) {
 				if ($this->conn->query($stmt)===true) {
 					$this->status =  "success";
 					$ret = true;
 				}else {
-					$this->status =  "Error: " . $stmt . "<br>" . $this->conn->error;
+					$this->status = $this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
 					$ret = false;
 				}
 			}
@@ -1546,7 +1731,7 @@ class Database{
 				$this->status =  "success";
 				return true;
 			}else {
-				$this->status =  "Error: " . $this->stmt . "<br>" . $this->conn->error;
+				$this->status = $this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
 				return false;
 			}
 		}
