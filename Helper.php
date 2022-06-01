@@ -94,6 +94,6 @@ function createSlug($string, $wordLimit=0) {
     }
     return $slug; 
 }
-// echo createSlug("hello World ++ C++   How @ Are! You| there $ is any & if #something ", 7);
+// echo createSlug("hello World ++ C++ How @ Are! You| there $ is any & if #something ", 7);
 
 // echo dateDiffNow("18-04-2022 10:51 AM");
