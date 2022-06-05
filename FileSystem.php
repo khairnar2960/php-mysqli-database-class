@@ -50,7 +50,7 @@ class FileSystem{
 						"path" => $path_file,
 						"created" => filectime($path_file),
 						"modified" => filemtime($path_file),
-						"files" => fileCount($path_file),
+						"files" => $this->fileCount($path_file),
 						"size" => $this->humanize($this->dirSize($path_file)),
 					]);
 				}else{

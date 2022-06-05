@@ -5,7 +5,6 @@
  * @version 1.0
  * @license MIT
  */
-require('ResultObject.php');
 
 class Database{
 	// Database connection properties
@@ -15,6 +14,7 @@ class Database{
 	private $database = 'test';
 	private $table = null;
 	private $conn;
+	private $connect = true;
 
 	// SQL server properties
 	private $engine = "InnoDB";
@@ -45,18 +45,35 @@ class Database{
 
 	/**
 	 * constructor method creates database connection
+	 * @method constructor
+	 * @param boolean	:	$connect	(true|false)
+	 * @default	= true
 	 **/
-	public function __construct(){
-		$this->conn();
+	public function __construct($connect=true){
+		$this->connect = $connect;
+		if ($this->connect===true) {
+			$this->connect();
+		}
 	}
 
 	/**
-	 * errorReporting metho enables mysqli error reporting
+	 * @method connect
+	 * database server connection
+	 * @param boolean	:	$connect	(true|false)
+	 * @default = true
+	 * if $connect=false it will return connection without database
+	 **/
+	public function connect(){
+		$this->conn(true);
+	}
+
+	/**
+	 * errorReporting method enables mysqli error reporting
 	 * @param $reporting : boolean (true|false)
 	 * if true then error reporting is on
 	 * else error reporting remains off
 	 **/
-	public function errorReporting($reporting=false){
+	public function errorReporting($reporting=null){
 		$driver = new mysqli_driver();
 		if ($reporting===true) {
 			$driver->report_mode = MYSQLI_REPORT_ALL;
@@ -70,6 +87,12 @@ class Database{
 		}
 	}
 
+
+	/**
+	 * @method dbExists
+	 * check is database exist or not
+	 * @param string	:	$database	(database_name)
+	 **/
 	protected function dbExists($database){
 		$this->conn(false);
 		$result = $this->conn->query("SHOW DATABASES LIKE '{$database}'");
@@ -80,6 +103,12 @@ class Database{
 		}
 	}
 
+
+	/**
+	 * @method	tableExists
+	 * check is table exist in database
+	 * @param	string	:	$table	(table_name)
+	 **/
 	protected function tableExists($table){
 		$result = $this->conn->query("SHOW TABLES LIKE '{$table}'");
 		if ($result->num_rows > 0) {
@@ -92,32 +121,39 @@ class Database{
 	/**
 	 * database connection method
 	 * returns mysqli connection object into $conn property
-	 * @param $db : boolean (true|false), default : true
-	 * if $db=false it will return connection without database
+	 * @param $connect_db : boolean (true|false), default : true
+	 * if $connect_db=false it will return connection without database
 	 **/
-	private function conn($db=true){
-		if ($db===true && $this->dbExists($this->database)) {
+	private function conn($connect_db){
+		if ($connect_db===true && $this->dbExists($this->database)) {
 			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database);
-		}elseif($db===false){
+		}elseif($connect_db===false){
 			$conn = new \mysqli($this->server, $this->user, $this->password);
 		}
 		if (isset($conn)) {
-			// check connection is done or not
-			if ($conn->connect_error) {
-			  $this->sql_error = $conn->connect_error;
+			if ($conn) {
+				// check connection is done or not
+				if ($conn->connect_error) {
+					$this->sql_error = $conn->connect_error;
+				}else{
+					$this->conn = $conn;
+					$this->setCharset();
+					$this->setTimeZone();
+					return $this;
+				}
 			}else{
-				$this->conn = $conn;
-				$this->setCharset();
-				$this->setTimeZone();
-				return $this;
+				$this->sql_error = "Database '{$this->database}' does not exists";
+				throw new \Exception("Database '{$this->database}' does not exists");
 			}
 		}else{
+			$this->sql_error = "Database '{$this->database}' does not exists";
 			throw new \Exception("Database '{$this->database}' does not exists");
 		}
 	}
 
 	/**
-	 * useDatabase method changes default database and
+	 * @method useDatabase
+	 * changes default database and
 	 * use the new database other than default one
 	 * @param $server : string (server_address) (ex. "localhost")
 	 * @param $user : string (user_name) (ex. "root")
@@ -139,7 +175,7 @@ class Database{
 		if ($database!==null) {
 			$this->database = $database;
 		}
-		$this->conn();
+		$this->conn($this->connect);
 		$this->resetResult();
 		return $this;
 	}
@@ -1224,7 +1260,7 @@ class Database{
 
 	/**
 	 * getResult method gets result AS object array
-	 * @uses ResultObject Class to get object of result
+	 * @uses stdClass to get object of result
 	 * 
 	 * ex.
 	 * require('Database.php');
@@ -1247,7 +1283,7 @@ class Database{
 		if ($this->num_rows > 0) {
 			// output data of each row AS associative array
 			while($row = $data->fetch_assoc()) {
-				array_push($this->result, new ResultObject($row));
+				array_push($this->result, (object) $row);
 			}
 			return $this->result;
 		}else{
@@ -1265,7 +1301,7 @@ class Database{
 		$this->num_rows = $data->num_rows;
 		if ($this->num_rows > 0) {
 			// output data of each row AS associative array
-			while($row = $data->fetch_assoc()) {
+			while($row = $data->fetch_array()) {
 				array_push($this->result, $row);
 			}
 			return $this->result;
@@ -1292,7 +1328,7 @@ class Database{
 		if ($this->num_rows > 0) {
 			// output data of each row
 			while($row = $data->fetch_assoc()) {
-				array_push($this->result, new ResultObject($row));
+				array_push($this->result, (object) $row);
 			}
 			// for +ve index
 			if (isset($this->result[$row_index])) {
@@ -1327,7 +1363,7 @@ class Database{
 		$this->num_rows = $data->num_rows;
 		if ($this->num_rows > 0) {
 			// output data of each row
-			while($row = $data->fetch_row()) {
+			while($row = $data->fetch_array()) {
 				array_push($this->result, $row);
 			}
 		}
@@ -1738,13 +1774,23 @@ class Database{
 	}
 
 	/**
-	 * this class uses destructor method simply to close connection
+	 * @method close
+	 * closes database connection
 	 **/
-	public function __destruct(){
+	public function close(){
 		try {
 			$this->conn->close();
 		} catch (mysqli_sql_exception $e) {
 			$this->sql_error = $e->__toString();
+		}
+	}
+
+	/**
+	 * this class uses destructor method simply to close connection
+	 **/
+	public function __destruct(){
+		if ($this->connect===true) {
+			$this->close();
 		}
 	}
 }
