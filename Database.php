@@ -327,7 +327,10 @@ class Database{
 	/**
 	 * distinct
 	 **/
-	public function distinct(){
+	public function distinct($column=null){
+		if ($column!==null) {
+			$this->selector = $this->escape($column);
+		}
 		$this->selector = "DISTINCT ".$this->selector;
 		return $this;
 	}
@@ -1287,7 +1290,7 @@ class Database{
 			}
 			return $this->result;
 		}else{
-			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+			$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
 			return false;
 		}
 	}
