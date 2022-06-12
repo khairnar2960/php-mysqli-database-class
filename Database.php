@@ -12,6 +12,7 @@ class Database{
 	private $user = 'root';
 	private $password = '';
 	private $database = 'test';
+	private $port = 3306;
 	private $table = null;
 	private $conn;
 	private $connect = true;
@@ -65,6 +66,7 @@ class Database{
 	 **/
 	public function connect(){
 		$this->conn(true);
+		return $this->conn;
 	}
 
 	/**
@@ -119,6 +121,17 @@ class Database{
 	}
 
 	/**
+	 * @method	usePort
+	 * @param	int	:	$port	(default:3306) [MySQL]
+	 * use 3307 for MariaDB on wampserver
+	 **/
+	public function usePort($port=null){
+		if ($port!==null) {
+			$this->port = $port;
+		}
+	}
+
+	/**
 	 * database connection method
 	 * returns mysqli connection object into $conn property
 	 * @param $connect_db : boolean (true|false), default : true
@@ -126,9 +139,9 @@ class Database{
 	 **/
 	private function conn($connect_db){
 		if ($connect_db===true && $this->dbExists($this->database)) {
-			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database);
+			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database, $this->port);
 		}elseif($connect_db===false){
-			$conn = new \mysqli($this->server, $this->user, $this->password);
+			$conn = new \mysqli($this->server, $this->user, $this->password, '', $this->port);
 		}
 		if (isset($conn)) {
 			if ($conn) {
