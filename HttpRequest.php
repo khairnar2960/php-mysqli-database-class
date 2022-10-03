@@ -66,3 +66,12 @@ class HttpRequest{
         return (object) $this->parseJSON();
     }
 }
+// require_once 'HttpRequest.php';
+// $req = new HttpRequest('http://localhost/desktop/test.php');
+// $req->setData(array(
+//     'hello' => 12
+// ));
+// $req->sendGET();
+// var_dump($req->getResponse());
+// $req->sendPOST();
+// echo $req->getResponse();

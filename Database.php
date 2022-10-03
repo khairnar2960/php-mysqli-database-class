@@ -2,16 +2,17 @@
 /**
  * PHP ORM Class by HitraA Technologies
  * @author Harshal Khairnar
- * @version 1.0
+ * @version 1.2.1
  * @license MIT
  */
 
 class Database{
 	// Database connection properties
 	private $server = 'localhost';
-	private $user = 'root';
-	private $password = '';
-	private $database = 'test';
+	private $user = 'paarsh';
+	private $password = 'Tushar9860';
+	private $database = 'pepplo';
+	private $port = 3306;
 	private $table = null;
 	private $conn;
 	private $connect = true;
@@ -34,6 +35,7 @@ class Database{
 	private $order_by = null;
 	private $set = ["columns"=>[], "values"=>[]];
 	public $sql_error = false;
+	public $num_rows;
 
 	// output properties
 	private $result = [];
@@ -42,6 +44,8 @@ class Database{
 
 	// pagination properties
 	private $paginationLink = "";
+	public $num_pages;
+	public $paged_rows;
 
 	/**
 	 * constructor method creates database connection
@@ -65,6 +69,7 @@ class Database{
 	 **/
 	public function connect(){
 		$this->conn(true);
+		return $this->conn;
 	}
 
 	/**
@@ -119,6 +124,17 @@ class Database{
 	}
 
 	/**
+	 * @method	usePort
+	 * @param	int	:	$port	(default:3306) [MySQL]
+	 * use 3307 for MariaDB on wampserver
+	 **/
+	public function usePort($port=null){
+		if ($port!==null) {
+			$this->port = $port;
+		}
+	}
+
+	/**
 	 * database connection method
 	 * returns mysqli connection object into $conn property
 	 * @param $connect_db : boolean (true|false), default : true
@@ -126,9 +142,9 @@ class Database{
 	 **/
 	private function conn($connect_db){
 		if ($connect_db===true && $this->dbExists($this->database)) {
-			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database);
+			$conn = new \mysqli($this->server, $this->user, $this->password, $this->database, $this->port);
 		}elseif($connect_db===false){
-			$conn = new \mysqli($this->server, $this->user, $this->password);
+			$conn = new \mysqli($this->server, $this->user, $this->password, '', $this->port);
 		}
 		if (isset($conn)) {
 			if ($conn) {
@@ -254,13 +270,43 @@ class Database{
 
 	/**
 	 * escape method for mysqli::real_escape_string()
-	 * @param $string : string (value_to_insert)
+	 * @param $rawValue : string (value_to_insert)
+	 * @since v1.2
 	 **/
-	public function escape($string=null){
-		if ($string!==null) {
-			return $this->conn->real_escape_string($string);
+	public function escape($rawValue=null){
+		if ($rawValue!==null) {
+			$json = false;
+			if (is_array($rawValue)) {
+				foreach ($rawValue as $key => $value) {
+					if (is_array($rawValue[$key])) {
+						$this->escape($rawValue[$key]);
+					}else{
+						$rawValue[$key] = $this->conn->real_escape_string($value);
+					}
+				}
+				return $rawValue;
+			}else{
+				if ($json = json_decode($rawValue)) {
+					foreach ($json as $key => $value) {
+						if (is_array($json[$key])) {
+							$this->escape($json[$key]);
+						}else{
+							$json[$key] = $this->conn->real_escape_string($value);
+						}
+					}
+					return json_encode($json);
+				}else{
+					return $this->conn->real_escape_string($rawValue);
+				}
+			}
 		}
 	}
+	/**
+	 * @method query
+	 * execute custom Queries
+	 * @param $stmt : string (SQL Query)
+	 * @since v1.0
+	 **/
 	public function query($stmt=null){
 		if ($stmt!==null && $stmt!=="") {
 			$this->stmt = $stmt;
@@ -1089,14 +1135,23 @@ class Database{
 		return $this;
 	}
 
-
 	/**
 	 * paginate method to get pagination result
 	 * @uses $table->table("listings")->paginate(1)->get()->getResult();
 	 * to get pagination links use getPaginationLink method
 	 * 
 	 **/
-	public function paginate($limit=10, array $options=array()){
+	public function paginate($limit=10, $callback=null, array $options=array()){
+		if ($callback==null){
+			$callback = function($page, $url=''){
+				return "{$url}?page={$page}";
+			};
+		}else{
+			if (!is_callable($callback)) {
+				throw new \Exception("{$callback} is not valid callable function");
+				exit();
+			}
+		}
 		if (!isset ($_GET['page']) ) {
 			$page = 1;
 		} elseif ($_GET['page']<1) {
@@ -1104,15 +1159,14 @@ class Database{
 		} else {
 			$page = (int) $_GET['page'];
 		}
+		$this->get();
+		$this->num_rows = (int) $this->conn->query($this->stmt)->num_rows;
 		if ($limit<1) {
 			$this->limit = 1;
 		}else{
 			$this->limit = $limit;
 		}
-		$records = (int) $this->conn->query(
-			"SELECT COUNT(*) AS count FROM `{$this->table}`"
-		)->fetch_assoc()["count"];
-		$number_of_page = (int) ceil($records / $this->limit);
+		$this->num_pages = (int) ceil($this->num_rows / $this->limit);
 		$this->offset = ($page-1) * $this->limit;
 		$this->limit($this->limit, $this->offset);
 		// Default Options
@@ -1126,17 +1180,44 @@ class Database{
 			"pagination_item_class"		=>	"page-item",
 			"pagination_link"			=>	"a",
 			"pagination_link_class"		=>	"page-link",
-			"prev_link"					=>	"&laquo;",
-			"next_link"					=>	"&raquo;",
+			"prev_link"					=>	"&lsaquo;",
+			"next_link"					=>	"&rsaquo;",
+			"first-last"				=>	false,
+			"first_link"				=>	"&laquo;",
+			"last_link"					=>	"&raquo;",
 		);
 		if (count($options)>0) {
 			foreach ($options AS $key => $value) {
 				$default[$key] = $value;
 			}
 		}
-		if ($records > $this->limit){
+		if ($this->num_rows > $this->limit){
 			$pagination_item = '<%1$s class="%2$s">%3$s</%1$s>';
 			$pagination_link = '<%1$s class="%2$s" %3$s>%4$s</%1$s>';
+			$firstLink = sprintf(
+				$pagination_item,
+				$default["pagination_item"],
+				$default["pagination_item_class"].($page<=1 ? " disabled" : ''),
+				sprintf(
+					$pagination_link,
+					$default["pagination_link"],
+					$default["pagination_link_class"],
+					"href='{$callback(1)}'",
+					$default["first_link"],
+				)
+			);
+			$lastLink = sprintf(
+				$pagination_item,
+				$default["pagination_item"],
+				$default["pagination_item_class"].($page===$this->num_pages ? " disabled" : ''),
+				sprintf(
+					$pagination_link,
+					$default["pagination_link"],
+					$default["pagination_link_class"],
+					"href='{$callback($this->num_pages)}'",
+					$default["last_link"],
+				)
+			);
 			$prevLink = sprintf(
 				$pagination_item,
 				$default["pagination_item"],
@@ -1145,12 +1226,12 @@ class Database{
 					$pagination_link,
 					$default["pagination_link"],
 					$default["pagination_link_class"],
-					($page>1 ? 'href="?page='.($page-1).'"' : ''),
+					($page>1 ? "href='{$callback($page-1)}'" : ''),
 					$default["prev_link"],
 				)
 			);
 			$links = "";
-			for($p = 1; $p<= $number_of_page; $p++) {
+			for($p = 1; $p<= $this->num_pages; $p++) {
 				if ($p===$page) {
 					$links .= sprintf(
 						$pagination_item,
@@ -1174,7 +1255,7 @@ class Database{
 							$pagination_link,
 							$default["pagination_link"],
 							$default["pagination_link_class"],
-							"href='?page={$p}'",
+							"href='{$callback($p)}'",
 							$p
 						)
 					);
@@ -1184,12 +1265,12 @@ class Database{
 			$nextLink = sprintf(
 				$pagination_item,
 				$default["pagination_item"],
-				$default["pagination_item_class"].($page===$number_of_page ? " disabled" : ''),
+				$default["pagination_item_class"].($page===$this->num_pages ? " disabled" : ''),
 				sprintf(
 					$pagination_link,
 					$default["pagination_link"],
 					$default["pagination_link_class"],
-					($page<$number_of_page ? 'href="?page='.($page+1).'"' : ''),
+					($page<$this->num_pages ? "href='{$callback($page+1)}'" : ''),
 					$default["next_link"],
 				)
 			);
@@ -1197,7 +1278,7 @@ class Database{
 				'<%1$s class="%2$s">%3$s</%1$s>',
 				$default["pagination_wraper"],
 				$default["pagination_wraper_class"],
-				$prevLink.$links.$nextLink
+				$default["first-last"] ? $firstLink.$prevLink.$links.$nextLink.$lastLink : $prevLink.$links.$nextLink
 			);
 			$container = sprintf(
 				'<%1$s class="%2$s" aria-label="%3$s">%4$s</%1$s>',
@@ -1282,16 +1363,30 @@ class Database{
 	public function getResult(){
 		$this->result = [];
 		$data = $this->conn->query($this->stmt);
-		$this->num_rows = $data->num_rows;
-		if ($this->num_rows > 0) {
-			// output data of each row AS associative array
-			while($row = $data->fetch_assoc()) {
-				array_push($this->result, (object) $row);
+		if ($this->num_pages){
+			$this->paged_rows = $data->num_rows;
+			if ($this->paged_rows > 0) {
+				// output data of each row AS associative array
+				while($row = $data->fetch_assoc()) {
+					array_push($this->result, (object) self::AdvanceTrim($row));
+				}
+				return $this->result;
+			}else{
+				$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
+				return false;
 			}
-			return $this->result;
 		}else{
-			$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
-			return false;
+			$this->num_rows = $data->num_rows;
+			if ($this->num_rows > 0) {
+				// output data of each row AS associative array
+				while($row = $data->fetch_assoc()) {
+					array_push($this->result, (object) self::AdvanceTrim($row));
+				}
+				return $this->result;
+			}else{
+				$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
+				return false;
+			}
 		}
 	}
 
@@ -1301,16 +1396,30 @@ class Database{
 	public function getResultArray(){
 		$this->result = [];
 		$data = $this->conn->query($this->stmt);
-		$this->num_rows = $data->num_rows;
-		if ($this->num_rows > 0) {
-			// output data of each row AS associative array
-			while($row = $data->fetch_array()) {
-				array_push($this->result, $row);
+		if ($this->num_pages){
+			$this->paged_rows = $data->num_rows;
+			if ($this->paged_rows > 0) {
+				// output data of each row AS associative array
+				while($row = $data->fetch_array()) {
+					array_push($this->result, self::AdvanceTrim($row));
+				}
+				return $this->result;
+			}else{
+				$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+				return false;
 			}
-			return $this->result;
 		}else{
-			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
-			return false;
+			$this->num_rows = $data->num_rows;
+			if ($this->num_rows > 0) {
+				// output data of each row AS associative array
+				while($row = $data->fetch_array()) {
+					array_push($this->result, self::AdvanceTrim($row));
+				}
+				return $this->result;
+			}else{
+				$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+				return false;
+			}
 		}
 	}
 
@@ -1331,7 +1440,7 @@ class Database{
 		if ($this->num_rows > 0) {
 			// output data of each row
 			while($row = $data->fetch_assoc()) {
-				array_push($this->result, (object) $row);
+				array_push($this->result, (object) self::AdvanceTrim($row));
 			}
 			// for +ve index
 			if (isset($this->result[$row_index])) {
@@ -1340,11 +1449,11 @@ class Database{
 				// this will return negative indexed object
 				return $this->result[count($this->result)+$row_index];
 			}else{
-				$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+				$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
 				return false;
 			}
 		}else{
-			$this->sql_error = "Error: " . $stmt . "<br>" . $this->conn->error;
+			$this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
 			return false;
 		}
 
@@ -1367,7 +1476,7 @@ class Database{
 		if ($this->num_rows > 0) {
 			// output data of each row
 			while($row = $data->fetch_array()) {
-				array_push($this->result, $row);
+				array_push($this->result, self::AdvanceTrim($row));
 			}
 		}
 		// for +ve index
@@ -1742,7 +1851,7 @@ class Database{
 	}
 
 	/**
-	 * save method insert records
+	 * @method save insert records
 	 * prepare by sql query by insert() method
 	 * OR
 	 * by set()->where() methods
@@ -1773,6 +1882,34 @@ class Database{
 				$this->status = $this->sql_error = "Error: " . $this->stmt . "<br>" . $this->conn->error;
 				return false;
 			}
+		}
+	}
+
+	/**
+	 * @method	AdvanceTrim
+	 * @param	string|Array $text
+	 * multipurpose trim for array, object and string
+	 * @since	1.2.1
+	 **/
+	public static function AdvanceTrim($text) {
+		if (is_array($text)) {
+			foreach ($text as $key => $value) {
+				unset($text[$key]);
+				$key = is_string($key) ? trim($key) : $key;
+				if (is_array($value)) {
+					$text[$key] = self::AdvanceTrim($value);
+				} elseif (is_object($value)) {
+					$text[$key] = (object) self::AdvanceTrim((array) $value);
+				} else {
+					$text[$key] = is_string($value) ? trim($value) : $value;
+				}
+			}
+			return $text;
+		} elseif (is_object($text)) {
+			$text = (object) self::AdvanceTrim((array) $text);
+			return $text;
+		} else {
+			return is_string($text) ? trim($text) : $text;
 		}
 	}
 
