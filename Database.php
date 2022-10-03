@@ -9,9 +9,9 @@
 class Database{
 	// Database connection properties
 	private $server = 'localhost';
-	private $user = 'root';
-	private $password = '';
-	private $database = 'test';
+	private $user = 'paarsh';
+	private $password = 'Tushar9860';
+	private $database = 'pepplo';
 	private $port = 3306;
 	private $table = null;
 	private $conn;
