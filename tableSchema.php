@@ -28,7 +28,7 @@ class Model{
 	}
 	public function getUnsigned($unsigned=false){
 		if ($unsigned===true) {
-			return " unsigned";
+			return " UNSIGNED";
 		}else{
 			return;
 		}
@@ -56,22 +56,7 @@ class Model{
 	}
 	public function ForeignKey($table, $on_delete="CASCADE"){
 		return $this->onDelete($on_delete);
-		"CONSTRAINT `states` FOREIGN KEY (`id`) REFERENCES `states` (`id`) ON DELETE CASCADE";
-	}
-	/**
-	 * AutoIncrement fields
-	 **/
-	public function SmallAutoField($default=false){
-		return $this->SmallIntegerField($default)." AUTO_INCREMENT";
-	}
-	public function AutoField($primary_key=false, $default=false){
-		return $this->IntegerField($default)." AUTO_INCREMENT";
-	}
-	public function BigAutoField($primary_key=false, $default=false){
-		return $this->BigIntegerField($default)." AUTO_INCREMENT";
-	}
-	public function SerialAutoField($null=false){
-		return "SERIAL {$this->getNull($null)}";
+		// "CONSTRAINT `states` FOREIGN KEY (`id`) REFERENCES `states` (`id`) ON DELETE CASCADE";
 	}
 	/**
 	 * Number fields
@@ -94,7 +79,21 @@ class Model{
 	public function DoubleField($max_digits=10, $decimal_places=2, $default=false, $unsigned=false){
 		return "double({$max_digits}, {$decimal_places}){$this->getUnsigned($unsigned)} {$this->getDefault($default)}";
 	}
-	
+	/**
+	 * AutoIncrement fields
+	 **/
+	public function SmallAutoField($default=false){
+		return $this->SmallIntegerField($default)." AUTO_INCREMENT";
+	}
+	public function AutoField($primary_key=false, $default=false){
+		return $this->IntegerField($default)." AUTO_INCREMENT";
+	}
+	public function BigAutoField($primary_key=false, $default=false){
+		return $this->BigIntegerField($default)." AUTO_INCREMENT";
+	}
+	public function SerialAutoField($null=false){
+		return "SERIAL {$this->getNull($null)}";
+	}
 
 	/**
 	 * boolean field
